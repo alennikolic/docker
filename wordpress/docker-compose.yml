@@ -1,0 +1,77 @@
+# ./wordpress/docker-compose.yml
+
+name: wordpress
+
+services:
+  db:
+    image: mariadb:${MARIADB_VERSION}
+    container_name: wordpress-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_DATABASE: ${WP_DB_NAME}
+      MARIADB_USER: ${WP_DB_USER}
+      MARIADB_PASSWORD: ${WP_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD}
+    volumes:
+      - ./data/db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - wordpress-net
+
+  wordpress:
+    image: wordpress:${WP_VERSION}
+    container_name: wordpress
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${WP_DB_NAME}
+      WORDPRESS_DB_USER: ${WP_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD}
+      WORDPRESS_TABLE_PREFIX: ${WP_TABLE_PREFIX}
+      # Otkomentarisi kada WordPress radi iza reverse proxy-ja sa HTTPS-om
+      # WORDPRESS_CONFIG_EXTRA: |
+      #   if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+      #       $$_SERVER['HTTPS'] = 'on';
+      #   }
+    ports:
+      - "${WP_PORT}:80"
+    volumes:
+      - ./data/wordpress:/var/www/html
+      - ./config/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - wordpress-net
+
+  # Opciono - pokrece se samo sa: docker compose --profile tools up -d
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    container_name: wordpress-phpmyadmin
+    restart: unless-stopped
+    profiles:
+      - tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 256M
+    ports:
+      - "${PMA_PORT}:80"
+    networks:
+      - wordpress-net
+
+networks:
+  wordpress-net:
+    driver: bridge
