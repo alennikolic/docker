@@ -1,0 +1,53 @@
+# ./.gitignore
+
+# ==== Tajne ====
+# Pravi .env fajlovi sa lozinkama - nikada u git
+.env
+*/.env
+.env.local
+.env.*.local
+!.env.example
+!*/.env.example
+
+# ==== Trajni podaci servisa ====
+# Baze, state, snimljene konfiguracije - ne pripadaju repozitorijumu
+data/
+*/data/
+!*/data/.gitkeep
+
+# ==== Sertifikati i kljucevi ====
+certs/
+*/certs/
+!*/certs/.gitkeep
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ==== Backup fajlovi ====
+*.sql
+*.dump
+*.tar.gz
+*.tgz
+backup-*
+*-backup-*
+
+# ==== Compose override ====
+# Lokalne izmene koje ne treba deliti
+docker-compose.override.yml
+compose.override.yml
+
+# ==== Editor i OS ====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==== Logovi ====
+*.log
+logs/
