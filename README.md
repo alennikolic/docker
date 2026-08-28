@@ -18,12 +18,19 @@ docker compose up -d
 
 | Folder | Servis | Opis |
 |---|---|---|
-| [`zabbix-6.0`](./zabbix-6.0) | Zabbix 6.0 LTS | Monitoring sistem — server, MySQL, frontend, Java gateway, agent |
-| [`zabbix-7.0`](./zabbix-7.0) | Zabbix 7.0 LTS | Novija LTS verzija, dodatno sa web service-om za PDF izvestaje |
+| [`zabbix 6.0`](./zabbix%206.0) | Zabbix 6.0 LTS | Monitoring sistem — server, MySQL, frontend, Java gateway, agent |
+| [`zabbix 7.0`](./zabbix%207.0) | Zabbix 7.0 LTS | Novija LTS verzija, dodatno sa web service-om za PDF izvestaje |
 | [`portainer`](./portainer) | Portainer CE | Web interfejs za upravljanje Docker okruzenjem |
 | [`haproxy`](./haproxy) | HAProxy | Load balancer i reverse proxy |
 
 Lista se dopunjuje. U planu: MySQL, PostgreSQL, Grafana, Nginx Proxy Manager, Uptime Kuma, Vaultwarden.
+
+> **Napomena o imenima foldera**
+> Dva Zabbix foldera imaju razmak u imenu (`zabbix 6.0`, `zabbix 7.0`). Zbog toga ih u shell-u uvek navodi pod navodnicima:
+> ```bash
+> cd "zabbix 7.0"
+> ```
+> Bez navodnika shell ce to protumaciti kao dva odvojena argumenta i komanda nece raditi. Isto vazi za `cp`, `tar`, `rm` i sve ostalo sto prima putanju.
 
 ---
 
@@ -103,6 +110,22 @@ Odjavi se i prijavi ponovo (ili `newgrp docker`) da bi promena vazila.
 
 > Clanstvo u `docker` grupi je ekvivalent root pristupu na toj masini. Dodaj samo korisnike kojima verujes.
 
+**Rotacija logova**
+
+Podrazumevani `json-file` log driver raste bez ogranicenja dok ne popuni disk. Ovo je najcesci uzrok kvara na masinama koje rade mesecima bez nadzora. Postavi globalni limit u `/etc/docker/daemon.json`:
+
+```json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
+Zatim `sudo systemctl restart docker`. Limit vazi za kontejnere kreirane posle restarta — postojece treba ponovo kreirati sa `docker compose up -d --force-recreate`.
+
 **Provera da sve radi**
 
 ```bash
@@ -123,13 +146,19 @@ Ako poslednja komanda ispise pozdravnu poruku, instalacija je uspesna.
 
 ```bash
 git clone https://github.com/alennikolic/docker.git
-cd <repo>
+cd docker
 ```
 
 **2. Udji u folder servisa koji ti treba**
 
 ```bash
 cd portainer
+```
+
+Za Zabbix foldere koristi navodnike:
+
+```bash
+cd "zabbix 7.0"
 ```
 
 **3. Napravi `.env` fajl i popuni ga**
@@ -159,10 +188,30 @@ Svi folderi prate ista pravila, tako da kada naucis jedan, znas i ostale:
 
 - **`docker-compose.yml`** — standardno ime, pa `docker compose up -d` radi bez dodatnih parametara.
 - **`.env.example`** — sablon sa promenljivim vrednostima. Kopira se u `.env` koji Compose automatski ucitava.
-- **`name:`** na vrhu compose fajla — fiksira ime projekta nezavisno od imena foldera.
+- **`name:`** na vrhu compose fajla — fiksira ime projekta nezavisno od imena foldera. Ovde nije stvar kozmetike: ime projekta se inace izvodi iz imena foldera, a imena foldera sa razmakom i tackom Compose mora da sanitizuje. Bez `name:` linije ne znas unapred kako ce se zvati mreza ni kontejneri. Sa njom je deterministicki.
 - **`./data/`** — svi trajni podaci idu tu kao bind mount, pa je backup celog servisa prosto arhiviranje tog foldera. Kreira se automatski pri prvom pokretanju.
 - **Portovi kroz promenljive** — nijedan port nije zakucan u compose fajlu, sve se menja iz `.env`.
 - **Prva linija svakog fajla je komentar sa njegovom putanjom** u repozitorijumu.
+- **`.env` i `data/` nikada ne idu u git** — pokriveni su `.gitignore` fajlom u root-u.
+
+---
+
+## Imena Docker mreza
+
+Kada jedan stack treba da vidi kontejnere iz drugog (npr. HAProxy koji prosledjuje saobracaj ka Zabbix frontendu), potrebno ti je tacno ime mreze. Ono se sastavlja kao `<name>_<mreza>`, gde `<name>` dolazi iz `name:` linije compose fajla:
+
+| Stack | `name:` | Ime mreze |
+|---|---|---|
+| Zabbix 6.0 | `zabbix-60` | `zabbix-60_zabbix-net` |
+| Zabbix 7.0 | `zabbix-70` | `zabbix-70_zabbix-net` |
+| Portainer | `portainer` | `portainer_portainer-net` |
+| HAProxy | `haproxy` | `haproxy_haproxy-net` |
+
+Uvek potvrdi stvarno stanje sa:
+
+```bash
+docker network ls
+```
 
 ---
 
@@ -201,12 +250,12 @@ docker system prune -a         # ciscenje neiskoriscenih slika i kontejnera
 
 Da se ne bi sudarali kada vise stack-ova radi na istoj masini:
 
-| Servis | Podrazumevani portovi |
-|---|---|
-| Zabbix 6.0 | `8080` (web), `10051` (server) |
-| Zabbix 7.0 | `8090` (web), `10061` (server) |
-| Portainer | `9443` (HTTPS web), `8000` (edge agent) |
-| HAProxy | `80`, `443`, `8404` (stats) |
+| Servis | Podrazumevani portovi | Promenljive |
+|---|---|---|
+| Zabbix 6.0 | `8080` (web), `10051` (server) | `ZBX_WEB_PORT`, `ZBX_SERVER_PORT` |
+| Zabbix 7.0 | `8090` (web), `10061` (server) | `ZBX_WEB_PORT`, `ZBX_SERVER_PORT` |
+| Portainer | `9443` (HTTPS web), `8000` (edge agent) | `PORTAINER_HTTPS_PORT`, `PORTAINER_EDGE_PORT` |
+| HAProxy | `80`, `443`, `8404` (stats) | `HAPROXY_HTTP_PORT`, `HAPROXY_HTTPS_PORT`, `HAPROXY_STATS_PORT` |
 
 Svi se menjaju kroz `.env` fajl odgovarajuceg foldera.
 
@@ -226,6 +275,10 @@ Nedostaje Compose v2 plugin. Instaliraj `docker-compose-plugin` iz zvanicnog Doc
 
 Neki drugi proces drzi taj port. Pronadji ga sa `sudo ss -tlnp | grep :<port>` pa ga zaustavi ili promeni port u `.env` fajlu.
 
+**`no such file or directory` pri ulasku u Zabbix folder**
+
+Ime foldera sadrzi razmak. Koristi `cd "zabbix 7.0"` sa navodnicima.
+
 **Kontejner se stalno restartuje**
 
 ```bash
@@ -242,6 +295,14 @@ Log skoro uvek sadrzi tacan razlog — najcesce greska u konfiguraciji ili nedos
 docker compose up -d --force-recreate
 ```
 
+**Kontejner ne moze da pise u `./data/` podfolder**
+
+Docker kreira nedostajuce bind mount foldere kao `root:root`, a procesi u Zabbix kontejnerima rade pod neprivilegovanim korisnikom. Ako u logu vidis `permission denied` na `export` ili `snmptraps`, ispravi vlasnistvo:
+
+```bash
+sudo chown -R 1997:1997 data/export data/snmptraps
+```
+
 **Nema slobodnog prostora na disku**
 
 ```bash
@@ -251,16 +312,28 @@ docker system prune -a --volumes
 
 ---
 
-## Napomena o bezbednosti
+## Pre izlaganja u produkciju
 
-Fajlovi `.env.example` u ovom repo-u sadrze placeholder lozinke koje su svima vidljive. Namenjeni su kao sablon, ne za produkciju.
+Ovaj repo je pisan kao skup radnih sablona. Pre nego sto bilo sta od ovoga stavi na masinu dostupnu spolja, prodji kroz listu:
 
-Pre nego sto bilo sta od ovoga izlozis internetu:
+**Obavezno**
 
-- Zameni sve podrazumevane lozinke.
-- Promeni podrazumevane admin kredencijale servisa (npr. Zabbix `Admin`/`zabbix`).
-- Ne izlazi administrativne interfejse direktno — stavi ih iza VPN-a ili reverse proxy-ja sa autentifikacijom.
-- Ako pravis sopstveni fork sa pravim lozinkama, dodaj `.gitignore` sa `.env` i `data/`.
+- Zameni sve podrazumevane lozinke iz `.env.example`.
+- Promeni podrazumevane admin kredencijale servisa (npr. Zabbix `Admin` / `zabbix`).
+- Proveri da `.env` i `data/` nisu u gitu: `git ls-files | grep -E '(^|/)\.env$|/data/'`. Ako je nesto vec commitovano, samo `.gitignore` to nece ukloniti — mora `git rm --cached`, a lozinka ostaje u istoriji i treba je promeniti.
+- Ne izlazi administrativne interfejse direktno. Stavi ih iza VPN-a ili reverse proxy-ja sa autentifikacijom, ili ih vezi na loopback:
+  ```yaml
+  ports:
+    - "127.0.0.1:${PORTAINER_HTTPS_PORT}:9443"
+  ```
+
+**Preporuceno**
+
+- Fiksiraj verzije slika umesto `latest` tagova, da nadogradnja bude svesna odluka a ne posledica `docker compose pull`.
+- Dodaj `mem_limit` i `cpus` svakom servisu, da jedan odbegli proces ne izgladni ceo host.
+- Dodaj healthcheck servisima koji ga nemaju. Bez njega `restart: unless-stopped` ne pomaze kada proces zivi ali ne odgovara.
+- Za MySQL: `--skip-log-bin` znaci da nemas point-in-time recovery, samo dnevni dump. Ako gubitak podataka od jednog dana nije prihvatljiv, ukloni tu opciju i podesi binlog backup.
+- Testiraj restore proceduru pre nego sto ti zatreba. Backup koji nikad nije vracen nije backup.
 
 ---
 
