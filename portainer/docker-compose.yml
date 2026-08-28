@@ -1,23 +1,24 @@
-version: "3.8"
+# ./portainer/docker-compose.yml
+
+name: portainer
 
 services:
   portainer:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:${PORTAINER_VERSION}
     container_name: portainer
     restart: always
+    security_opt:
+      - no-new-privileges:true
     ports:
-      - "9000:9000"
+      - "${PORTAINER_HTTPS_PORT}:9443"
+      - "${PORTAINER_EDGE_PORT}:8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
+      - ./data/portainer:/data
+      - /etc/localtime:/etc/localtime:ro
     networks:
-      - apps
-
-volumes:
-  portainer_data:
+      - portainer-net
 
 networks:
-  apps:
-    external: true
-
-
+  portainer-net:
+    driver: bridge
